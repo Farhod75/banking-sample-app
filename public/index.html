@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sample Banking App</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .hidden { display: none; }
+    .error { color: red; }
+    .success { color: green; }
+    label { display: block; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Sample Banking App</h1>
+
+  <section id="login-section">
+    <h2>Login</h2>
+    <div class="error" id="login-error"></div>
+    <label>
+      Username:
+      <input type="text" id="username" value="alice" />
+    </label>
+    <label>
+      Password:
+      <input type="password" id="password" value="password123" />
+    </label>
+    <button id="login-button">Login</button>
+  </section>
+
+  <section id="app-section" class="hidden">
+    <div>
+      Logged in as: <span id="user-name"></span>
+      <button id="logout-button">Logout</button>
+    </div>
+
+    <h2>Accounts</h2>
+    <table border="1" cellpadding="4">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Type</th>
+          <th>Balance</th>
+        </tr>
+      </thead>
+      <tbody id="accounts-table-body"></tbody>
+    </table>
+
+    <h2>Transfer</h2>
+    <div class="error" id="transfer-error"></div>
+    <div class="success" id="transfer-success"></div>
+
+    <label>
+      From Account:
+      <select id="from-account"></select>
+    </label>
+    <label>
+      To Account:
+      <select id="to-account"></select>
+    </label>
+    <label>
+      Amount:
+      <input type="number" id="amount" step="0.01" />
+    </label>
+    <button id="transfer-button">Submit Transfer</button>
+
+    <h2>Transfer History</h2>
+    <ul id="transfer-history"></ul>
+  </section>
+
+  <script>
+    async function api(path, options = {}) {
+      const res = await fetch(path, {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        ...options
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw data;
+      return data;
+    }
+
+    async function refreshAccounts() {
+      const accounts = await api('/api/accounts');
+      const tbody = document.getElementById('accounts-table-body');
+      const fromSelect = document.getElementById('from-account');
+      const toSelect = document.getElementById('to-account');
+      tbody.innerHTML = '';
+      fromSelect.innerHTML = '';
+      toSelect.innerHTML = '';
+
+      accounts.forEach(acc => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${acc.id}</td>
+          <td>${acc.type}</td>
+          <td>${acc.balance.toFixed(2)}</td>
+        `;
+        tbody.appendChild(tr);
+
+        const optFrom = document.createElement('option');
+        optFrom.value = acc.id;
+        optFrom.textContent = `${acc.id} (${acc.type})`;
+        fromSelect.appendChild(optFrom);
+
+        const optTo = document.createElement('option');
+        optTo.value = acc.id;
+        optTo.textContent = `${acc.id} (${acc.type})`;
+        toSelect.appendChild(optTo);
+      });
+    }
+
+    async function refreshTransfers() {
+      const history = await api('/api/transfers');
+      const ul = document.getElementById('transfer-history');
+      ul.innerHTML = '';
+      history.forEach(t => {
+        const li = document.createElement('li');
+        li.textContent = `${t.timestamp}: ${t.fromAccountId} -> ${t.toAccountId} : $${t.amount.toFixed(2)}`;
+        ul.appendChild(li);
+      });
+    }
+
+    async function initApp() {
+      const loginSection = document.getElementById('login-section');
+      const appSection = document.getElementById('app-section');
+      const loginError = document.getElementById('login-error');
+      const transferError = document.getElementById('transfer-error');
+      const transferSuccess = document.getElementById('transfer-success');
+
+      document.getElementById('login-button').onclick = async () => {
+        loginError.textContent = '';
+        try {
+          const username = document.getElementById('username').value;
+          const password = document.getElementById('password').value;
+          const user = await api('/api/login', {
+            method: 'POST',
+            body: JSON.stringify({ username, password })
+          });
+          document.getElementById('user-name').textContent = user.name;
+          loginSection.classList.add('hidden');
+          appSection.classList.remove('hidden');
+          await refreshAccounts();
+          await refreshTransfers();
+        } catch (err) {
+          loginError.textContent = err.error || 'Login failed';
+        }
+      };
+
+      document.getElementById('logout-button').onclick = async () => {
+        await api('/api/logout', { method: 'POST' }).catch(() => {});
+        location.reload();
+      };
+
+      document.getElementById('transfer-button').onclick = async () => {
+        transferError.textContent = '';
+        transferSuccess.textContent = '';
+        try {
+          const fromAccountId = document.getElementById('from-account').value;
+          const toAccountId = document.getElementById('to-account').value;
+          const amount = document.getElementById('amount').value;
+          const res = await api('/api/transfer', {
+            method: 'POST',
+            body: JSON.stringify({ fromAccountId, toAccountId, amount })
+          });
+          transferSuccess.textContent = `Transfer successful (ID: ${res.transfer.id})`;
+          await refreshAccounts();
+          await refreshTransfers();
+        } catch (err) {
+          transferError.textContent = err.error || 'Transfer failed';
+        }
+      };
+    }
+
+    window.addEventListener('DOMContentLoaded', initApp);
+  </script>
+</body>
+</html>
